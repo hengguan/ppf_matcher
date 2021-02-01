@@ -217,7 +217,7 @@ void PPF3DDetector::trainModel(const Mat &PC)
   float distanceStep = (float)(diameter * sampling_step_relative);
 
   Mat sampled = samplePCByQuantization(PC, xRange, yRange, zRange, (float)sampling_step_relative,0);
-
+  std::cout <<"number of model points after sampled: "<<sampled.rows<<std::endl;
   int size = sampled.rows*sampled.rows;
 
   hashtable_int* hashTable = hashtableCreate(size, NULL);
@@ -268,7 +268,8 @@ void PPF3DDetector::trainModel(const Mat &PC)
       }
     }
   }
-
+  std::cout<<"model diameter: "<<diameter<<std::endl;
+  model_diameter = diameter;
   angle_step = angle_step_radians;
   distance_step = distanceStep;
   hash_table = hashTable;
@@ -437,6 +438,7 @@ void PPF3DDetector::match(const Mat& pc, std::vector<Pose3DPtr>& results, const 
   float diameter = sqrt ( dx * dx + dy * dy + dz * dz );
   float distanceSampleStep = diameter * RelativeSceneDistance;*/
   Mat sampled = samplePCByQuantization(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0);
+  std::cout <<"number of scene points after sampled: "<<sampled.rows<<std::endl;
 
   // allocate the accumulator : Moved this to the inside of the loop
   /*#if !defined (_OPENMP)
@@ -471,6 +473,10 @@ void PPF3DDetector::match(const Mat& pc, std::vector<Pose3DPtr>& results, const 
       if (i!=j)
       {
         const Vec3f p2(sampled.ptr<float>(j));
+        // Vec3d d(p2 - p1);
+        // double dist = cv::norm(d);
+        if (cv::norm(p2 - p1)>model_diameter)
+          continue;
         const Vec3f n2(sampled.ptr<float>(j) + 3);
         Vec3d p2t;
         double alpha_scene;

@@ -145,7 +145,7 @@ public:
 
 protected:
 
-  double angle_step, angle_step_radians, distance_step;
+  double angle_step, angle_step_radians, distance_step, model_diameter;
   double sampling_step_relative, angle_step_relative, distance_step_relative;
   Mat sampled_pc, ppf;
   int num_ref_points;

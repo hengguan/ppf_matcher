@@ -246,7 +246,7 @@ static hashtable_int* getHashtable(int* data, size_t length, int numMaxElement)
 int ICP::registerModelToScene(const Mat& srcPC, const Mat& dstPC, double& residual, Matx44d& pose)
 {
   int n = srcPC.rows;
-  CV_CheckGT(n, 0, "");
+  // CV_CheckGT(n, 0, "");
 
   const bool useRobustReject = m_rejectionScale>0;
 

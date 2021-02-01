@@ -3,16 +3,25 @@
 #include "surface_matching/ppf_helpers.hpp"
 #include "opencv2/core/utility.hpp"
 
+#include <pcl/common/common_headers.h>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/filters/voxel_grid.h>
 
-// #include <thread>
+// #include <boost/thread.hpp>
+// #include <boost/date_time.hpp>
+#include <thread>
 
+// #include <pcl/features/normal_3d.h>
+// #include <pcl/console/parse.h>
+
+using namespace std::chrono_literals;
 using namespace std;
 using namespace cv;
 using namespace ppf_match_3d;
 using namespace pcl;
+using namespace boost;
 
 static void help(const string &errorMessage)
 {
@@ -62,6 +71,7 @@ int main(int argc, char **argv)
 
     Mat pc = loadPLYSimple(modelFileName.c_str(), 1);
     PointCloud<PointNormal>::Ptr cloud_normal(new PointCloud<PointNormal>());
+    PointCloud<PointNormal>::Ptr vox_cloud(new PointCloud<PointNormal>());
     for (int i = 0; i < pc.rows; i++)
     {
         const float *data = pc.ptr<float>(i);
@@ -75,11 +85,29 @@ int main(int argc, char **argv)
         cloud_normal->push_back(pn);
     }
 
+    VoxelGrid<PointNormal> vox;
+    vox.setInputCloud(cloud_normal);
+    vox.setLeafSize(6.0, 6.0, 6.0);
+    vox.filter(*vox_cloud);
+
+    Mat pc_in = Mat(vox_cloud->size(), 6, CV_32FC1);
+    for(int i=0;i<vox_cloud->size();i++)
+    {
+        float *data = pc_in.ptr<float>(i);
+        data[0] = vox_cloud->at(i).x;
+        data[1] = vox_cloud->at(i).y;
+        data[2] = vox_cloud->at(i).z;
+        data[3] = vox_cloud->at(i).normal_x;
+        data[4] = vox_cloud->at(i).normal_y;
+        data[5] = vox_cloud->at(i).normal_z;
+    }
+    std::cout << "number of model points: " << pc_in.rows << std::endl;
+
     // Now train the model
     cout << "Training..." << endl;
     int64 tick1 = cv::getTickCount();
     ppf_match_3d::PPF3DDetector detector(0.025, 0.05);
-    detector.trainModel(pc);
+    detector.trainModel(pc_in);
     int64 tick2 = cv::getTickCount();
     cout << endl
          << "Training complete in "
@@ -89,13 +117,26 @@ int main(int argc, char **argv)
 
     // Read the scene
     Mat pcTest = loadPLYSimple(sceneFileName.c_str(), 1);
+    std::cout << "number of scene points: " << pc.rows << std::endl;
+    PointCloud<PointXYZ>::Ptr cloud_scene(new PointCloud<PointXYZ>());
+    for (int i = 0; i < pcTest.rows; i++)
+    {
+        const float *data = pcTest.ptr<float>(i);
+        PointXYZ pt;
+        pt.x = data[0];
+        pt.y = data[1];
+        pt.z = data[2];
+        cloud_scene->push_back(pt);
+    }
+    viewer->addPointCloud<PointXYZ>(cloud_scene, "cloud_scene");
+    viewer->setPointCloudRenderingProperties(visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_scene");
 
     // Match the model to the scene and get the pose
     cout << endl
          << "Starting matching..." << endl;
     vector<Pose3DPtr> results;
     tick1 = cv::getTickCount();
-    detector.match(pcTest, results, 1.0 / 40.0, 0.05);
+    detector.match(pcTest, results, 1.0 / 10.0, 0.025);
     tick2 = cv::getTickCount();
     cout << endl
          << "PPF Elapsed Time " << (tick2 - tick1) / cv::getTickFrequency() << " sec" << endl;
@@ -145,27 +186,29 @@ int main(int argc, char **argv)
         {
             Mat pct = transformPCPose(pc, result->pose);
             // writePLY(pct, "para6700PCTrans.ply");
+            PointCloud<PointXYZ>::Ptr cloud_result(new PointCloud<PointXYZ>());
+            for (int i = 0; i < pct.rows; i++)
+            {
+                const float *data = pct.ptr<float>(i);
+                PointXYZ pt;
+                pt.x = data[0];
+                pt.y = data[1];
+                pt.z = data[2];
+                cloud_result->push_back(pt);
+            }
+            stringstream ss;
+            ss << "pose_" << i;
+            pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> RandomColor(cloud_result);
+            viewer->addPointCloud<PointXYZ>(cloud_result, RandomColor, ss.str());
+            /*修改现实点云的尺寸。用户可通过该方法控制点云在视窗中的显示方式*/
+            viewer->setPointCloudRenderingProperties(visualization::PCL_VISUALIZER_POINT_SIZE, 1, ss.str());
         }
     }
-    viewer->addPointCloud<PointNormal>(cloud_normal, "sample cloud");
-    /*修改现实点云的尺寸。用户可通过该方法控制点云在视窗中的显示方式*/
-    viewer->setPointCloudRenderingProperties(visualization::PCL_VISUALIZER_POINT_SIZE, 2, "sample cloud");
-    /*设置XYZ三个坐标轴的大小和长度，该值也可以缺省
-     *查看复杂的点云图像会让用户没有方向感，为了让用户保持正确的方向判断，需要显示坐标轴。三个坐标轴X（R，红色）
-     * Y（G，绿色）Z（B，蓝色）分别用三种不同颜色的圆柱体代替。
-     */
-    // viewer->addCoordinateSystem(1.0);
-    // /*通过设置相机参数是用户从默认的角度和方向观察点*/
-    // viewer->initCameraParameters();
 
-    /*此while循环保持窗口一直处于打开状态，并且按照规定时间刷新窗口。
-     * wasStopped()判断显示窗口是否已经被关闭，spinOnce()叫消息回调函数，作用其实是设置更新屏幕的时间
-     * this_thread::sleep()在县城中调用sleep()。抱歉，我还不知道这句话的作用
-     */
     while (!viewer->wasStopped())
     {
         viewer->spinOnce(100);
-        boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+        std::this_thread::sleep_for(100ms);
     }
     return 0;
 }
