@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 
     VoxelGrid<PointNormal> vox;
     vox.setInputCloud(cloud_normal);
-    vox.setLeafSize(6.0, 6.0, 6.0);
+    vox.setLeafSize(7.0, 7.0, 7.0);
     vox.filter(*vox_cloud);
 
     Mat pc_in = Mat(vox_cloud->size(), 6, CV_32FC1);

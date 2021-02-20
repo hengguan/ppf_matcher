@@ -13,13 +13,13 @@ project(surface_matching)
 # set(CMAKE_USE_WIN32_THREADS_INIT 0)
 # set(CMAKE_USE_PTHREADS_INIT 1)
 # set(THREADS_PREFER_PTHREAD_FLAG ON)
-
+set(CMAKE_CXX_STANDARD 14)
 # add_compile_options(-std=c++11)
 
 #Pcl
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Eigen REQUIRED)
+# find_package(Eigen REQUIRED)
 find_package(Boost REQUIRED COMPONENTS)
 
 include_directories(${PCL_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} include)
