@@ -95,6 +95,7 @@ Mat samplePCUniformInd(Mat PC, int sampleStep, std::vector<int>& indices);
  *  @return Sampled point cloud
 */
 CV_EXPORTS_W Mat samplePCByQuantization(Mat pc, Vec2f& xrange, Vec2f& yrange, Vec2f& zrange, float sample_step_relative, int weightByCenter=0);
+CV_EXPORTS_W Mat samplePCByCluster(Mat pc, Vec2f& xrange, Vec2f& yrange, Vec2f& zrange, float sample_step_relative, double angleOffset=0.314);
 
 void computeBboxStd(Mat pc, Vec2f& xRange, Vec2f& yRange, Vec2f& zRange);
 

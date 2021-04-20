@@ -68,6 +68,7 @@ typedef struct HSHTBL_i
 {
   size_t size;
   struct hashnode_i **nodes;
+  KeyType **neighbors;
   size_t (*hashfunc)(uint);
 } hashtable_int;
 
@@ -94,9 +95,11 @@ hashtable_int *hashtableCreate(size_t size, size_t (*hashfunc)(uint));
 void hashtableDestroy(hashtable_int *hashtbl);
 int hashtableInsert(hashtable_int *hashtbl, KeyType key, void *data);
 int hashtableInsertHashed(hashtable_int *hashtbl, KeyType key, void *data);
+int hashtblInsertHashedNeighbors(hashtable_int *hashtbl, KeyType key, void *data, KeyType hashKeys[]);
 int hashtableRemove(hashtable_int *hashtbl, KeyType key);
 void *hashtableGet(hashtable_int *hashtbl, KeyType key);
 hashnode_i* hashtableGetBucketHashed(hashtable_int *hashtbl, KeyType key);
+KeyType* hashtblGetBucketHashedValues(hashtable_int *hashtbl, KeyType key);
 int hashtableResize(hashtable_int *hashtbl, size_t size);
 hashtable_int *hashtable_int_clone(hashtable_int *hashtbl);
 hashtable_int *hashtableRead(FILE* f);

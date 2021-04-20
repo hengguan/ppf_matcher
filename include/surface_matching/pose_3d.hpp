@@ -45,6 +45,7 @@
 
 #include "opencv2/core/cvstd.hpp" // cv::Ptr
 #include <vector>
+#include <set>
 #include <string>
 
 namespace cv
@@ -121,7 +122,7 @@ public:
   int readPose(const std::string& FileName);
 
   virtual ~Pose3D() {}
-
+  std::set<int> maxVoters;
   CV_PROP double alpha, residual;
   CV_PROP size_t modelIndex, numVotes;
   CV_PROP Matx44d pose;

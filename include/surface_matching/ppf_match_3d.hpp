@@ -151,6 +151,7 @@ protected:
   int num_ref_points;
   hashtable_int* hash_table;
   THash* hash_nodes;
+  float **hashKeys;
 
   double position_threshold, rotation_threshold;
   bool use_weighted_avg;
