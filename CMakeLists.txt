@@ -15,14 +15,28 @@ project(surface_matching)
 # set(THREADS_PREFER_PTHREAD_FLAG ON)
 set(CMAKE_CXX_STANDARD 14)
 # add_compile_options(-std=c++11)
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fopenmp") 
 
 #Pcl
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
 # find_package(Eigen REQUIRED)
 find_package(Boost REQUIRED COMPONENTS)
+FIND_PACKAGE( OpenMP REQUIRED)
+if(OPENMP_FOUND)
+    message("OPENMP FOUND")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
 
-include_directories(${PCL_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} include)
+
+# set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin) # 二进制文件的输出目录
+link_directories(${PROJECT_SOURCE_DIR}/lib/yaml-cpp)
+# add_executable(${PROJECT_NAME} main.cpp)
+# target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/include) 
+
+include_directories(${PCL_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} include include/vcglib)
 link_directories(${PCL_LIBRARY_DIRS} ${OpenCV_LIBRARY_DIRS} ${Boost_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS} ${OpenCV_DEFINITIONS} ${Boost_DEFINITIONS}) 
 
@@ -42,10 +56,19 @@ add_library(ppf_match_3d src/ppf_match_3d.cpp)
 target_link_libraries(ppf_match_3d ${OpenCV_LIBRARIES} pose_3d t_hash_int)
 
 add_executable (ppf_matcher ppf_matcher.cpp)
-target_link_libraries (ppf_matcher ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ppf_match_3d ppf_helpers icp)
+target_link_libraries (ppf_matcher ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ppf_match_3d ppf_helpers icp yaml-cpp.a)
 
 add_executable (model_normal_estimation model_normal_estimation.cpp)
 target_link_libraries (model_normal_estimation ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}  ppf_helpers)
 
 add_executable (scene_normal_estimation scene_normal_estimation.cpp)
 target_link_libraries (scene_normal_estimation ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}  ppf_helpers)
+
+add_executable (segment_cluster segment_cluster.cpp)
+target_link_libraries (segment_cluster ${PCL_LIBRARIES})
+
+add_executable (test_mat test.cpp)
+target_link_libraries (test_mat ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
+
+# add_executable (convert_mm_to_m convert_mm_to_m.cpp)
+# target_link_libraries (convert_mm_to_m ${PCL_LIBRARIES})

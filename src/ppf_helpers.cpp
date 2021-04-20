@@ -315,7 +315,7 @@ namespace cv
       float xr = xrange[1] - xrange[0];
       float yr = yrange[1] - yrange[0];
       float zr = zrange[1] - zrange[0];
-      std::cout<<"xcell size: "<<xr/numSamplesDim<<", ycell size: "<<yr/numSamplesDim<<", zcell size: "<<zr/numSamplesDim<<std::endl;
+      std::cout << "xcell size: " << xr / numSamplesDim << ", ycell size: " << yr / numSamplesDim << ", zcell size: " << zr / numSamplesDim << std::endl;
       int numPoints = 0;
 
       map.resize((numSamplesDim + 1) * (numSamplesDim + 1) * (numSamplesDim + 1));
@@ -451,6 +451,130 @@ namespace cv
           c++;
 
           curCell.clear();
+        }
+      }
+
+      map.clear();
+      return pcSampled;
+    }
+
+    // uses a volume instead of an octree
+    // TODO: Right now normals are required.
+    // This is much faster than sample_pc_octree
+    Mat samplePCByCluster(Mat pc, Vec2f &xrange, Vec2f &yrange, Vec2f &zrange, float sampleStep, double angleOffset)
+    {
+      std::vector<std::vector<std::vector<double>>> map;
+
+      int numSamplesDim = (int)(1.0 / sampleStep);
+
+      float xr = xrange[1] - xrange[0];
+      float yr = yrange[1] - yrange[0];
+      float zr = zrange[1] - zrange[0];
+      std::cout << "xcell size: " << xr / numSamplesDim << ", ycell size: " << yr / numSamplesDim << ", zcell size: " << zr / numSamplesDim << std::endl;
+      int numPoints = 0;
+
+      map.resize((numSamplesDim + 1) * (numSamplesDim + 1) * (numSamplesDim + 1));
+
+      // OpenMP might seem like a good idea, but it didn't speed this up for me
+      //#pragma omp parallel for
+      for (int i = 0; i < pc.rows; i++)
+      {
+        const float *point = pc.ptr<float>(i);
+
+        // quantize a point
+        const int xCell = (int)((float)numSamplesDim * (point[0] - xrange[0]) / xr);
+        const int yCell = (int)((float)numSamplesDim * (point[1] - yrange[0]) / yr);
+        const int zCell = (int)((float)numSamplesDim * (point[2] - zrange[0]) / zr);
+        const int index = xCell * numSamplesDim * numSamplesDim + yCell * numSamplesDim + zCell;
+
+        if (map[index].size() > 0)
+        {
+          int j = 0;
+          bool flag = false;
+          for (; j < map[index].size(); j++)
+          {
+            std::vector<double> ps = map[index][j];
+            const Vec3f n1(point[3], point[4], point[5]);
+            const Vec3f n2(ps[3], ps[4], ps[5]);
+            // double angle = TAngle3Normalized(n1, n2);
+            if (TAngle3Normalized(n1, n2) < angleOffset)
+            {
+              ps[0] = (ps[0] + (double)point[0]) / 2.0;
+              ps[1] = (ps[1] + (double)point[1]) / 2.0;
+              ps[2] = (ps[2] + (double)point[2]) / 2.0;
+              ps[3] = (ps[3] + (double)point[3]) / 2.0;
+              ps[4] = (ps[4] + (double)point[4]) / 2.0;
+              ps[5] = (ps[5] + (double)point[5]) / 2.0;
+              flag = true;
+              break;
+            }
+          }
+          if (j >= map[index].size() && !flag)
+          {
+            std::vector<double> p;
+            p.push_back((double)point[0]);
+            p.push_back((double)point[1]);
+            p.push_back((double)point[2]);
+            p.push_back((double)point[3]);
+            p.push_back((double)point[4]);
+            p.push_back((double)point[5]);
+            // pcs.push_back(p);
+            map[index].push_back(p);
+            numPoints++;
+          }
+        }
+        else
+        {
+          // std::vector<std::vector<double>> pcs;
+          std::vector<double> p;
+          p.push_back((double)point[0]);
+          p.push_back((double)point[1]);
+          p.push_back((double)point[2]);
+          p.push_back((double)point[3]);
+          p.push_back((double)point[4]);
+          p.push_back((double)point[5]);
+          // pcs.push_back(p);
+          map[index].push_back(p);
+          numPoints++;
+        }
+        /*#pragma omp critical
+        {*/
+        // map[index].push_back(i);
+        //  }
+      }
+      Mat pcSampled = Mat(numPoints, pc.cols, CV_32F);
+      int c = 0;
+      for (unsigned int i = 0; i < map.size(); i++)
+      {
+        int cn = (int)map[i].size();
+        if (cn > 0)
+        {
+          for (unsigned int j = 0; j < cn; j++)
+          {
+            std::vector<double> sp = map[i][j];
+            double nx = 0, ny = 0, nz = 0;
+            float *pcData = pcSampled.ptr<float>(c);
+            pcData[0] = (float)sp[0];
+            pcData[1] = (float)sp[1];
+            pcData[2] = (float)sp[2];
+            // normalize the normals
+            double norm = sqrt(sp[3] * sp[3] + sp[4] * sp[4] + sp[5] * sp[5]);
+            if (norm > EPS)
+            {
+              pcData[3] = (float)(sp[3] / norm);
+              pcData[4] = (float)(sp[4] / norm);
+              pcData[5] = (float)(sp[5] / norm);
+            }
+            else
+            {
+              pcData[3] = 0.0f;
+              pcData[4] = 0.0f;
+              pcData[5] = 0.0f;
+            }
+            //#pragma omp atomic
+            c++;
+            sp.clear();
+          }
         }
       }
 

@@ -1,45 +1,9 @@
-//
-//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
-//
-//  By downloading, copying, installing or using the software you agree to this license.
-//  If you do not agree to this license, do not download, install,
-//  copy or use the software.
-//
-//
-//                          License Agreement
-//                For Open Source Computer Vision Library
-//
-// Copyright (C) 2014, OpenCV Foundation, all rights reserved.
-// Third party copyrights are property of their respective owners.
-//
-// Redistribution and use in source and binary forms, with or without modification,
-// are permitted provided that the following conditions are met:
-//
-//   * Redistribution's of source code must retain the above copyright notice,
-//     this list of conditions and the following disclaimer.
-//
-//   * Redistribution's in binary form must reproduce the above copyright notice,
-//     this list of conditions and the following disclaimer in the documentation
-//     and/or other materials provided with the distribution.
-//
-//   * The name of the copyright holders may not be used to endorse or promote products
-//     derived from this software without specific prior written permission.
-//
-// This software is provided by the copyright holders and contributors "as is" and
-// any express or implied warranties, including, but not limited to, the implied
-// warranties of merchantability and fitness for a particular purpose are disclaimed.
-// In no event shall the Intel Corporation or contributors be liable for any direct,
-// indirect, incidental, special, exemplary, or consequential damages
-// (including, but not limited to, procurement of substitute goods or services;
-// loss of use, data, or profits; or business interruption) however caused
-// and on any theory of liability, whether in contract, strict liability,
-// or tort (including negligence or otherwise) arising in any way out of
-// the use of this software, even if advised of the possibility of such damage.
-//
 // Author: Tolga Birdal <tbirdal AT gmail.com>
 
 #include "precomp.hpp"
 #include "hash_murmur.hpp"
+#include <omp.h>
+#include <math.h>
 
 namespace cv
 {
@@ -88,6 +52,69 @@ namespace cv
       return hashKey[0];
     }
 
+    // quantize ppf and hash it for proper indexing
+    static std::vector<KeyType> hashPPFMulti(const Vec4d &f, const double AngleStep, const double DistanceStep)
+    {
+      std::vector<KeyType> hashKeys;
+      int f0 = (int)(f[0] / AngleStep);
+      int f1 = (int)(f[1] / AngleStep);
+      int f2 = (int)(f[2] / AngleStep);
+      int f3 = (int)(f[3] / DistanceStep);
+
+      // #pragma omp parallel for
+      for (int i = -1; i < 2; i++)
+      {
+        int k1 = f0 + i;
+        for (int j = -1; j < 2; j++)
+        {
+          int k2 = f1 + j;
+          for (int k = -1; k < 2; k++)
+          {
+            int k3 = f2 + k;
+            for (int l = -1; l < 2; l++)
+            {
+              Vec4i key(k1, k2, k3, f3 + l);
+              KeyType hashKey[2] = {0, 0}; // hashMurmurx64() fills two values
+              murmurHash(key.val, 4 * sizeof(int), 42, &hashKey[0]);
+              hashKeys.push_back(hashKey[0]);
+            }
+          }
+        }
+      }
+      return hashKeys;
+    }
+
+    // quantize ppf and hash it for proper indexing
+    void hashPPFMulti(const Vec4d &f, const double AngleStep, const double DistanceStep, KeyType hashKeys[81])
+    {
+      // std::vector<KeyType> hashKeys;
+      int f0 = (int)(f[0] / AngleStep);
+      int f1 = (int)(f[1] / AngleStep);
+      int f2 = (int)(f[2] / AngleStep);
+      int f3 = (int)(f[3] / DistanceStep);
+
+      int ind = 0;
+      // #pragma omp parallel for
+      for (int i = -1; i < 2; i++)
+      {
+        int k1 = f0 + i;
+        for (int j = -1; j < 2; j++)
+        {
+          int k2 = f1 + j;
+          for (int k = -1; k < 2; k++)
+          {
+            int k3 = f2 + k;
+            for (int l = -1; l < 2; l++)
+            {
+              Vec4i key(k1, k2, k3, f3 + l);
+              KeyType hashKey[2] = {0, 0}; // hashMurmurx64() fills two values
+              murmurHash(key.val, 4 * sizeof(int), 42, &hashKey[0]);
+              hashKeys[ind++] = hashKey[0];
+            }
+          }
+        }
+      }
+    }
     /*static size_t hashMurmur(uint key)
 {
   size_t hashKey=0;
@@ -119,7 +146,7 @@ namespace cv
     PPF3DDetector::PPF3DDetector()
     {
       sampling_step_relative = 0.05;
-      distance_step_relative = 0.05;
+      // distance_step_relative = 0.05;
       scene_sample_step = (int)(1 / 0.04);
       angle_step_relative = 30;
       angle_step_radians = (360.0 / angle_step_relative) * M_PI / 180.0;
@@ -135,7 +162,7 @@ namespace cv
     PPF3DDetector::PPF3DDetector(const double RelativeSamplingStep, const double RelativeDistanceStep, const double NumAngles)
     {
       sampling_step_relative = RelativeSamplingStep;
-      distance_step_relative = RelativeDistanceStep;
+      // distance_step_relative = RelativeDistanceStep;
       angle_step_relative = NumAngles;
       angle_step_radians = (360.0 / angle_step_relative) * M_PI / 180.0;
       //SceneSampleStep = 1.0/RelativeSceneSampleStep;
@@ -214,10 +241,21 @@ namespace cv
       float dz = zRange[1] - zRange[0];
       float diameter = sqrt(dx * dx + dy * dy + dz * dz);
 
-      float distanceStep = (float)(diameter * sampling_step_relative);
+      float distanceStep = (float)(diameter * sampling_step_relative) / 2.0;
+      angle_step_radians /= 2.0;
+      // int numAngle = angle_step_relative * 2.0;
+      // int numDistStep = (int)(2.0/sampling_step_relative);
+      // int numRow = numAngle*numAngle*numAngle*numDistStep;
+      // float hashKeys[numRow][81];
 
-      Mat sampled = samplePCByQuantization(PC, xRange, yRange, zRange, (float)sampling_step_relative, 0);
-      std::cout << "number of model points after sampled: " << sampled.rows << std::endl;
+      // Mat sampled = samplePCByQuantization(PC, xRange, yRange, zRange, (float)sampling_step_relative*2.0, 0);
+      Mat sampled = PC;
+      // Mat sampled_small = samplePCByCluster(PC, xRange, yRange, zRange, (float)sampling_step_relative, 0.31415);
+      // std::cout << "number of model points after sampled_small: " << sampled_small.rows << std::endl;
+      // writePLY(sampled_small, "sampled_small.ply");
+      // Mat sampled = samplePCByCluster(sampled_small, xRange, yRange, zRange, (float)sampling_step_relative*2.0, 0.174532922);
+      // std::cout << "number of model points after sampled: " << sampled.rows << std::endl;
+      // writePLY(sampled, "sampled.ply");
       int size = sampled.rows * sampled.rows;
 
       hashtable_int *hashTable = hashtableCreate(size, NULL);
@@ -226,23 +264,27 @@ namespace cv
       ppf = Mat(numPPF, PPF_LENGTH, CV_32FC1);
 
       // TODO: Maybe I could sample 1/5th of them here. Check the performance later.
-      int numRefPoints = sampled.rows;
+      // int numRefPoints = sampled.rows;
+      angle_step = angle_step_radians;
+      distance_step = distanceStep;
+      num_ref_points = sampled.rows;
+      float maxDist = 0;
 
       // pre-allocate the hash nodes
-      hash_nodes = (THash *)calloc(numRefPoints * numRefPoints, sizeof(THash));
+      hash_nodes = (THash *)calloc(size, sizeof(THash));
 
       // TODO : This can easily be parallelized. But we have to lock hashtable_insert.
       // I realized that performance drops when this loop is parallelized (unordered
       // inserts into the hashtable
       // But it is still there to be investigated. For now, I leave this unparallelized
-      // since this is just a training part.
-      for (int i = 0; i < numRefPoints; i++)
+      // since this is just a training part. /* hashtableInsertHashed(hashTable, hashKeys[40], (void *)hashNode);*/
+      for (int i = 0; i < num_ref_points; i++)
       {
         const Vec3f p1(sampled.ptr<float>(i));
         const Vec3f n1(sampled.ptr<float>(i) + 3);
-
         //printf("///////////////////// NEW REFERENCE ////////////////////////\n");
-        for (int j = 0; j < numRefPoints; j++)
+#pragma omp parallel for
+        for (int j = 0; j < num_ref_points; j++)
         {
           // cannot compute the ppf with myself
           if (i != j)
@@ -252,28 +294,37 @@ namespace cv
 
             Vec4d f = Vec4d::all(0);
             computePPFFeatures(p1, n1, p2, n2, f);
-            KeyType hashValue = hashPPF(f, angle_step_radians, distanceStep);
-            double alpha = computeAlpha(p1, n1, p2);
-            uint ppfInd = i * numRefPoints + j;
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+            {
+              if (f[3] > maxDist)
+                maxDist = f[3];
+            }
 
-            THash *hashNode = &hash_nodes[i * numRefPoints + j];
-            hashNode->id = hashValue;
+            // KeyType hashValue = hashPPF(f, angle_step_radians, distanceStep);
+            KeyType hashKeys[81];
+            hashPPFMulti(f, angle_step_radians, distanceStep, hashKeys);
+            double alpha = computeAlpha(p1, n1, p2);
+            uint ppfInd = i * num_ref_points + j;
+
+            THash *hashNode = &hash_nodes[ppfInd];
+            hashNode->id = hashKeys[40];
             hashNode->i = i;
             hashNode->ppfInd = ppfInd;
 
-            hashtableInsertHashed(hashTable, hashValue, (void *)hashNode);
+            hashtblInsertHashedNeighbors(hashTable, hashKeys[40], (void *)hashNode, hashKeys);
 
             Mat(f).reshape(1, 1).convertTo(ppf.row(ppfInd).colRange(0, 4), CV_32F);
             ppf.ptr<float>(ppfInd)[4] = (float)alpha;
           }
         }
       }
-      std::cout << "model diameter: " << diameter << std::endl;
-      model_diameter = diameter;
-      angle_step = angle_step_radians;
-      distance_step = distanceStep;
+      std::cout << "model diameter: " << diameter << ", max distance: " << maxDist << std::endl;
+      model_diameter = maxDist + 1.0;
+      rotation_threshold = angle_step_radians * 3.0;
+      position_threshold = distanceStep * 4.0;
       hash_table = hashTable;
-      num_ref_points = numRefPoints;
       sampled_pc = sampled;
       trained = true;
     }
@@ -394,14 +445,18 @@ namespace cv
 
           tAvg *= 1.0 / curSize;
           qAvg *= 1.0 / curSize;
-
+          // normalize quantonion
+          const double qNorm = cv::norm(qAvg);
+          if (qNorm > EPS)
+          {
+            qAvg *= 1.0 / qNorm;
+          }
           curPoses[0]->updatePoseQuat(qAvg, tAvg);
           curPoses[0]->numVotes = curCluster->numVotes;
 
           finalPoses[i] = curPoses[0]->clone();
         }
       }
-
       poseClusters.clear();
     }
 
@@ -418,9 +473,10 @@ namespace cv
       scene_sample_step = (int)(1.0 / relativeSceneSampleStep);
 
       //int numNeighbors = 10;
-      int numAngles = (int)(floor(2 * M_PI / angle_step));
+      int numAngles = (int)(floor(2 * M_PI / angle_step)) / 2;
       float distanceStep = (float)distance_step;
       uint n = num_ref_points;
+      uint MINVOTE = n * 0.01;
       std::vector<Pose3DPtr> poseList;
       int sceneSamplingStep = scene_sample_step;
 
@@ -434,9 +490,28 @@ namespace cv
   float dz = zRange[1] - zRange[0];
   float diameter = sqrt ( dx * dx + dy * dy + dz * dz );
   float distanceSampleStep = diameter * RelativeSceneDistance;*/
-      Mat sampled = samplePCByQuantization(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0);
+      // Mat sampled = samplePCByQuantization(pc, xRange, yRange, zRange, (float)(relativeSceneDistance/2.0), 0);
+      Mat sampled = pc;
+      // Mat sampled_small = samplePCByCluster(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0.31415);
+      // std::cout << "number of scene points after sampled_small: " << sampled_small.rows << std::endl;
+      // writePLY(sampled_small, "sampled_scene_small.ply");
+      // Mat sampled = samplePCByCluster(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0.174532922);
       std::cout << "number of scene points after sampled: " << sampled.rows << std::endl;
+      // writePLY(sampled, "sampled_scene.ply");
 
+      // build KD-Tree to search points that distance less than a model radius
+      std::cout << "build KD-Tree to search points" << std::endl;
+      cv::Mat_<float> features(0, 3);
+      for (int i = 0; i < sampled.rows; i++)
+      {
+        const float *point = sampled.ptr<float>(i);
+        //Fill matrix
+        cv::Mat row = (cv::Mat_<float>(1, 3) << point[0], point[1], point[2]);
+        features.push_back(row);
+      }
+      cv::flann::Index flann_index(features, cv::flann::KDTreeIndexParams(1));
+      unsigned int max_neighbours = num_ref_points * 2;
+      double model_max_dist = model_diameter * model_diameter;
       // allocate the accumulator : Moved this to the inside of the loop
       /*#if !defined (_OPENMP)
      uint* accumulator = (uint*)calloc(numAngles*n, sizeof(uint));
@@ -456,46 +531,54 @@ namespace cv
         const Vec3f n1(sampled.ptr<float>(i) + 3);
         Vec3d tsg = Vec3d::all(0);
         Matx33d Rsg = Matx33d::all(0), RInv = Matx33d::all(0);
-
-        uint *accumulator = (uint *)calloc(numAngles * n, sizeof(uint));
+        
         computeTransformRT(p1, n1, Rsg, tsg);
 
+        uint *accumulator = (uint *)calloc(numAngles * n, sizeof(uint));
+        uint32_t *ppfFlags = (uint32_t *)calloc(n * n, sizeof(uint32_t));
+
+        std::vector<float> vecQuery{p1[0], p1[1], p1[2]};
+        std::vector<int> vecIndex;
+        std::vector<float> vecDist;
+        flann_index.radiusSearch(vecQuery, vecIndex, vecDist, model_max_dist, max_neighbours, cv::flann::SearchParams(max_neighbours));
         // Tolga Birdal's notice:
         // As a later update, we might want to look into a local neighborhood only
         // To do this, simply search the local neighborhood by radius look up
         // and collect the neighbors to compute the relative pose
-
-        for (int j = 0; j < sampled.rows; j++)
+        for (int j = 1; j < vecIndex.size(); j++)
         {
-          if (i != j)
+          int pInd = vecIndex[j];
+          if ((pInd == 0) && (vecIndex[j - 1] == 0))
           {
-            const Vec3f p2(sampled.ptr<float>(j));
-            // Vec3d d(p2 - p1);
-            // double dist = cv::norm(d);
-            if (cv::norm(p2 - p1) > model_diameter)
-              continue;
-            const Vec3f n2(sampled.ptr<float>(j) + 3);
-            Vec3d p2t;
-            double alpha_scene;
+            break;
+          }
 
-            Vec4d f = Vec4d::all(0);
-            computePPFFeatures(p1, n1, p2, n2, f);
-            KeyType hashValue = hashPPF(f, angle_step, distanceStep);
+          const Vec3f p2(sampled.ptr<float>(pInd));
+          const Vec3f n2(sampled.ptr<float>(pInd) + 3);
+          
+          Vec4d f = Vec4d::all(0);
+          computePPFFeatures(p1, n1, p2, n2, f);
+          KeyType hashValue_ = hashPPF(f, angle_step, distanceStep);
+          KeyType *hashValues = hashtblGetBucketHashedValues(hash_table, (hashValue_));
+          if (!hashValues)
+            continue;
 
-            p2t = tsg + Rsg * Vec3d(p2);
-
-            alpha_scene = atan2(-p2t[2], p2t[1]);
-
-            if (alpha_scene != alpha_scene)
-            {
-              continue;
-            }
-
-            if (sin(alpha_scene) * p2t[2] < 0.0)
-              alpha_scene = -alpha_scene;
-
+          Vec3d p2t;
+          double alpha_scene;
+          p2t = tsg + Rsg * Vec3d(p2);
+          alpha_scene = atan2(-p2t[2], p2t[1]);
+          if (alpha_scene != alpha_scene)
+          {
+            continue;
+          }
+          if (sin(alpha_scene) * p2t[2] < 0.0)
             alpha_scene = -alpha_scene;
+          alpha_scene = -alpha_scene;
 
+          // including 80 neighbor ot search candidates
+          for (int k = 0; k < 81; k++) 
+          {
+            KeyType hashValue = hashValues[k];
             hashnode_i *node = hashtableGetBucketHashed(hash_table, (hashValue));
 
             while (node)
@@ -516,21 +599,23 @@ namespace cv
 
               //printf("%f\n", alpha);
               int alpha_index = (int)(numAngles * (alpha + 2 * M_PI) / (4 * M_PI));
-
-              uint accIndex = corrI * numAngles + alpha_index;
-
-              accumulator[accIndex]++;
+              if (((ppfFlags[ppfInd] >> alpha_index) & 1) == 0)
+              {
+                uint accIndex = corrI * numAngles + alpha_index;
+                accumulator[accIndex]++;
+                ppfFlags[ppfInd] |= 1 << alpha_index;
+              }
               node = node->next;
             }
           }
         }
-
+        free(ppfFlags);
         // Maximize the accumulator
         for (uint k = 0; k < n; k++)
         {
           for (int j = 0; j < numAngles; j++)
           {
-            const uint accInd = k * numAngles + j;
+            const int accInd = k * numAngles + j;
             const uint accVal = accumulator[accInd];
             if (accVal > maxVotes)
             {
@@ -538,63 +623,64 @@ namespace cv
               refIndMax = k;
               alphaIndMax = j;
             }
-
-#if !defined(_OPENMP)
-            accumulator[accInd] = 0;
-#endif
+            // #if !defined(_OPENMP)
+            //             accumulator[accInd] = 0;
+            // #endif
           }
         }
+        free(accumulator);
+        if (maxVotes > MINVOTE)
+        {
+          // invert Tsg : Luckily rotation is orthogonal: Inverse = Transpose.
+          // We are not required to invert.
+          Vec3d tInv, tmg;
+          Matx33d Rmg;
+          RInv = Rsg.t();
+          tInv = -RInv * tsg;
 
-        // invert Tsg : Luckily rotation is orthogonal: Inverse = Transpose.
-        // We are not required to invert.
-        Vec3d tInv, tmg;
-        Matx33d Rmg;
-        RInv = Rsg.t();
-        tInv = -RInv * tsg;
+          Matx44d TsgInv;
+          rtToPose(RInv, tInv, TsgInv);
 
-        Matx44d TsgInv;
-        rtToPose(RInv, tInv, TsgInv);
+          // TODO : Compute pose
+          const Vec3f pMax(sampled_pc.ptr<float>(refIndMax));
+          const Vec3f nMax(sampled_pc.ptr<float>(refIndMax) + 3);
 
-        // TODO : Compute pose
-        const Vec3f pMax(sampled_pc.ptr<float>(refIndMax));
-        const Vec3f nMax(sampled_pc.ptr<float>(refIndMax) + 3);
+          computeTransformRT(pMax, nMax, Rmg, tmg);
 
-        computeTransformRT(pMax, nMax, Rmg, tmg);
+          Matx44d Tmg;
+          rtToPose(Rmg, tmg, Tmg);
 
-        Matx44d Tmg;
-        rtToPose(Rmg, tmg, Tmg);
+          // convert alpha_index to alpha
+          int alpha_index = alphaIndMax;
+          double alpha = ((alpha_index + 0.5) * (4 * M_PI)) / numAngles - 2 * M_PI;
 
-        // convert alpha_index to alpha
-        int alpha_index = alphaIndMax;
-        double alpha = (alpha_index * (4 * M_PI)) / numAngles - 2 * M_PI;
+          // Equation 2:
+          Matx44d Talpha;
+          Matx33d R;
+          Vec3d t = Vec3d::all(0);
+          getUnitXRotation(alpha, R);
+          rtToPose(R, t, Talpha);
 
-        // Equation 2:
-        Matx44d Talpha;
-        Matx33d R;
-        Vec3d t = Vec3d::all(0);
-        getUnitXRotation(alpha, R);
-        rtToPose(R, t, Talpha);
+          Matx44d rawPose = TsgInv * (Talpha * Tmg);
 
-        Matx44d rawPose = TsgInv * (Talpha * Tmg);
-
-        Pose3DPtr pose(new Pose3D(alpha, refIndMax, maxVotes));
-        pose->updatePose(rawPose);
+          Pose3DPtr pose(new Pose3D(alpha, refIndMax, maxVotes));
+          pose->updatePose(rawPose);
+          // std::set<int> maxVoters_(voters[refIndMax][alphaIndMax].begin(), voters[refIndMax][alphaIndMax].end());
+          // pose->maxVoters = maxVoters_;
 #if defined(_OPENMP)
 #pragma omp critical
 #endif
-        {
-          poseList.push_back(pose);
+          {
+            poseList.push_back(pose);
+          }
         }
-
-        free(accumulator);
       }
 
       // TODO : Make the parameters relative if not arguments.
       //double MinMatchScore = 0.5;
-
-      int numPosesAdded = sampled.rows / sceneSamplingStep;
-
-      clusterPoses(poseList, numPosesAdded, results);
+      // int numPosesAdded = sampled.rows / sceneSamplingStep;
+      std::cout << "number of Hypothesis: " << poseList.size() << std::endl;
+      clusterPoses(poseList, poseList.size(), results);
     }
 
   } // namespace ppf_match_3d

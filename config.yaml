@@ -1,0 +1,6 @@
+voxSize: 0.008
+relativeSamStep: 0.02
+relativeDistStep: 0.05 # useless
+sceneSamStep: 0.1
+sceneDistStep: 0.02
+
