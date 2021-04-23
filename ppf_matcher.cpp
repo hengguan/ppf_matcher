@@ -124,7 +124,7 @@ int main(int argc, char **argv)
         << (double)(tick2 - tick1) / cv::getTickFrequency()
         << " sec" << endl
         << "Loading model..." << endl;
-
+    
     // vector<string> file_ids = {
     //     "000041.pcd_normal", "000129.pcd_normal", "000310.pcd_normal", 
     //     "000368.pcd_normal", "000382.pcd_normal", "000476.pcd_normal", 
@@ -133,17 +133,19 @@ int main(int argc, char **argv)
     //     "000069.pcd_normal", "000082.pcd_normal", "000170.pcd_normal", 
     //     "000300.pcd_normal", "000377.pcd_normal", "000499.pcd_normal", 
     //     "000684.pcd_normal", "000721.pcd_normal", "000739.pcd_normal", "000745.pcd_normal"};
-    // vector<string> file_ids = {"000041m", "000145m","000283m", "000403m", "000512m", "000651m", "000753m", "000902m", "000992m", "001080m", "001168m", "001231m"};
-    vector<string> file_ids = {"scene_0", "scene_1","scene_2", "scene_3", "scene_4", "scene_5", "scene_6", "scene_7", "scene_8", "scene_9", "scene_10", "scene_11"};
+    vector<string> file_ids = {"000041m", "000145m","000283m", "000403m", "000512m", "000651m", "000753m", "000902m", "000992m", "001080m", "001168m", "001231m"};
+    // vector<string> file_ids = {"scene_0", "scene_1","scene_2", "scene_3", "scene_4", "scene_5", "scene_6", "scene_7", "scene_8", "scene_9", "scene_10", "scene_11"};
     // vector<string> file_ids = {"000041m", "000044m","000063m", "000098m", "000123m", "000142m", "000177m", "000181m", "000184m", "000280m"};
 
+    // Create an instance of ICP
+    ICP icp(100, 0.05f, 2.5f, 8);
     for(int i=0; i<file_ids.size(); i++)
     {
         boost::shared_ptr<visualization::PCLVisualizer> viewer(new visualization::PCLVisualizer("3D viewer"));
         /*设置窗口viewer的背景颜色*/
         viewer->setBackgroundColor(0, 0, 0);
         stringstream ss_in;
-        ss_in << "../samples/data/cloud_sampled_lm/" << file_ids[i] << ".ply";
+        ss_in << "../samples/data/cloud_lm/" << file_ids[i] << ".ply";
         // Read the scene
         // Mat pcTest = loadPLYSimple(sceneFileName.c_str(), 1);
         PointCloud<PointNormal>::Ptr scene_normal(new PointCloud<PointNormal>());
@@ -207,7 +209,7 @@ int main(int argc, char **argv)
         }
 
         // Get only first N results - but adjust to results size if num of results are less than that specified by N
-        size_t N = 4;
+        size_t N = 1;
         if (results_size < N)
         {
             cout << endl
@@ -217,18 +219,15 @@ int main(int argc, char **argv)
         }
         vector<Pose3DPtr> resultsSub(results.begin(), results.begin() + N);
 
-        // Create an instance of ICP
-        // ICP icp(100, 0.005f, 2.5f, 8);
-        // int64 t1 = cv::getTickCount();
+        int64 t1 = cv::getTickCount();
+        // Register for all selected poses
+        cout << endl
+            << "Performing ICP on " << N << " poses..." << endl;
+        icp.registerModelToScene(detector.sampled_refine, pcTest, resultsSub);
+        int64 t2 = cv::getTickCount();
 
-        // // Register for all selected poses
-        // cout << endl
-        //     << "Performing ICP on " << N << " poses..." << endl;
-        // icp.registerModelToScene(pc_in, pcTest, resultsSub);
-        // int64 t2 = cv::getTickCount();
-
-        // cout << endl
-        //     << "ICP Elapsed Time " << (t2 - t1) / cv::getTickFrequency() << " sec" << endl;
+        cout << endl
+            << "ICP Elapsed Time " << (t2 - t1) / cv::getTickFrequency() << " sec" << endl;
 
         cout << "Poses: " << endl;
         vector<vector<int>> color_map = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {0, 255, 255}, {255, 0, 255}};

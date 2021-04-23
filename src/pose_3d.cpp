@@ -127,6 +127,11 @@ void Pose3D::updatePoseQuat(Vec4d& Q, Vec3d& NewT)
   }
 }
 
+void Pose3D::updateScore(double Score)
+{
+  this->score = Score;
+}
+
 
 void Pose3D::appendPose(Matx44d& IncrementalPose)
 {
@@ -172,7 +177,7 @@ Pose3DPtr Pose3D::clone()
 
 void Pose3D::printPose()
 {
-  printf("\n-- Pose to Model Index %d: NumVotes = %d, Residual = %f\n", (uint)this->modelIndex, (uint)this->numVotes, this->residual);
+  printf("\n-- Pose to Model Index %d: NumVotes = %d, Residual = %f, score: %f\n", (uint)this->modelIndex, (uint)this->numVotes, this->residual, this->score);
   std::cout << this->pose << std::endl;
 }
 
@@ -187,6 +192,7 @@ int Pose3D::writePose(FILE* f)
   fwrite(t.val, sizeof(double)*3, 1, f);
   fwrite(q.val, sizeof(double)*4, 1, f);
   fwrite(&residual, sizeof(double), 1, f);
+  fwrite(&score, sizeof(double), 1, f);
   return 0;
 }
 

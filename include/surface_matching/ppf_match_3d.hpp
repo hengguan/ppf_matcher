@@ -97,7 +97,7 @@ typedef struct THash
 class CV_EXPORTS_W PPF3DDetector
 {
 public:
-
+  Mat sampled_refine;
   /**
    * \brief Empty constructor. Sets default arguments
    */
@@ -140,14 +140,15 @@ public:
     */
   CV_WRAP void match(const Mat& scene, CV_OUT std::vector<Pose3DPtr> &results, const double relativeSceneSampleStep=1.0/5.0, const double relativeSceneDistance=0.03);
 
+  CV_WRAP void refine(const Mat& scene, CV_OUT std::vector<Pose3DPtr> &results, const int topK);
   void read(const FileNode& fn);
   void write(FileStorage& fs) const;
 
 protected:
 
-  double angle_step, angle_step_radians, distance_step, model_diameter;
+  double angle_step, angle_step_radians, distance_step, model_diameter, max_dist;
   double sampling_step_relative, angle_step_relative, distance_step_relative;
-  Mat sampled_pc, ppf;
+  Mat sampled_pc, ppf, sampled_scene;
   int num_ref_points;
   hashtable_int* hash_table;
   THash* hash_nodes;
@@ -168,6 +169,8 @@ private:
   bool matchPose(const Pose3D& sourcePose, const Pose3D& targetPose);
 
   void clusterPoses(std::vector<Pose3DPtr>& poseList, int numPoses, std::vector<Pose3DPtr> &finalPoses);
+
+  void refinePoses(std::vector<Pose3DPtr> &poseList, const int topK, const float dist, std::vector<Pose3DPtr> &finalPoses);
 
   bool trained;
 };

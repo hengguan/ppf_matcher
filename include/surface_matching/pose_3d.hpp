@@ -77,6 +77,7 @@ public:
     modelIndex=0;
     numVotes=0;
     residual = 0;
+    score = 0.0;
 
     pose = Matx44d::all(0);
   }
@@ -113,6 +114,7 @@ public:
    */
   CV_WRAP void appendPose(Matx44d& IncrementalPose);
   CV_WRAP void printPose();
+  CV_WRAP void updateScore(double Score);
 
   Pose3DPtr clone();
 
@@ -123,7 +125,7 @@ public:
 
   virtual ~Pose3D() {}
   std::set<int> maxVoters;
-  CV_PROP double alpha, residual;
+  CV_PROP double alpha, residual, score;
   CV_PROP size_t modelIndex, numVotes;
   CV_PROP Matx44d pose;
   CV_PROP double angle;

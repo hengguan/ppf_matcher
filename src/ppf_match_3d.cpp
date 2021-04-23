@@ -4,6 +4,7 @@
 #include "hash_murmur.hpp"
 #include <omp.h>
 #include <math.h>
+#include "surface_matching/poisson_disk_sampling.hpp"
 
 namespace cv
 {
@@ -25,6 +26,11 @@ namespace cv
       return (a->numVotes > b->numVotes);
     }
 
+    static int sortPoseByScore(const Pose3DPtr &a, const Pose3DPtr &b)
+    {
+      CV_Assert(!a.empty() && !b.empty());
+      return (a->score > b->score);
+    }
     // simple hashing
     /*static int hashPPFSimple(const Vec4d& f, const double AngleStep, const double DistanceStep)
 {
@@ -115,6 +121,37 @@ namespace cv
         }
       }
     }
+    void cvMat2vcgMesh(const Mat &pc, MyMesh &m)
+    {
+      m.Clear();
+
+      int vertCount = pc.rows;
+      vcg::tri::Allocator<MyMesh>::AddVertices(m, vertCount);
+      for (int i = 0; i < vertCount; ++i)
+      {
+        const float *data = pc.ptr<float>(i);
+        m.vert[i].P() = vcg::Point3f(data[0], data[1], data[2]);
+        m.vert[i].N() = vcg::Point3f(data[3], data[4], data[5]);
+      }
+    }
+
+    void vcgMesh2cvMat(const MyMesh &m, Mat &pc)
+    {
+      pc = Mat(m.vert.size(), 6, CV_32FC1);
+      for (int i = 0; i < m.vert.size(); ++i)
+      {
+        float *data = pc.ptr<float>(i);
+        vcg::Point3f n = m.vert[i].N();
+        vcg::Point3f p = m.vert[i].P();
+        data[0] = p[0];
+        data[1] = p[1];
+        data[2] = p[2];
+        data[3] = n[0];
+        data[4] = n[1];
+        data[5] = n[2];
+      }
+    }
+        
     /*static size_t hashMurmur(uint key)
 {
   size_t hashKey=0;
@@ -242,20 +279,23 @@ namespace cv
       float diameter = sqrt(dx * dx + dy * dy + dz * dz);
 
       float distanceStep = (float)(diameter * sampling_step_relative) / 2.0;
+      double poisson_radius = diameter * sampling_step_relative;
       angle_step_radians /= 2.0;
-      // int numAngle = angle_step_relative * 2.0;
-      // int numDistStep = (int)(2.0/sampling_step_relative);
-      // int numRow = numAngle*numAngle*numAngle*numDistStep;
-      // float hashKeys[numRow][81];
 
-      // Mat sampled = samplePCByQuantization(PC, xRange, yRange, zRange, (float)sampling_step_relative*2.0, 0);
-      Mat sampled = PC;
-      // Mat sampled_small = samplePCByCluster(PC, xRange, yRange, zRange, (float)sampling_step_relative, 0.31415);
-      // std::cout << "number of model points after sampled_small: " << sampled_small.rows << std::endl;
-      // writePLY(sampled_small, "sampled_small.ply");
-      // Mat sampled = samplePCByCluster(sampled_small, xRange, yRange, zRange, (float)sampling_step_relative*2.0, 0.174532922);
-      // std::cout << "number of model points after sampled: " << sampled.rows << std::endl;
+      // Mat sampled = samplePCByQuantization(PC, xRange, yRange, zRange, (float)sampling_step_relative*2.0, 1);
+      MyMesh m, subM, subM_refine;
+      Mat sampled;
+      cvMat2vcgMesh(PC, m);
+      std::cout<<"transform size: "<< m.vert.size()<<std::endl;
+      poissonDiskSampling(m, subM, poisson_radius);
+      std::cout<<"sub sampling size: "<< subM.vert.size()<<std::endl;
+      vcgMesh2cvMat(subM, sampled);
+      std::cout << "number of model points after sampled: " << sampled.rows << std::endl;
       // writePLY(sampled, "sampled.ply");
+      std::cout<<"transform size: "<< m.vert.size()<<std::endl;
+      poissonDiskSampling(m, subM_refine, poisson_radius/2.0);
+      std::cout<<"sub sampling refine size: "<< subM_refine.vert.size()<<std::endl;
+      vcgMesh2cvMat(subM_refine, sampled_refine);
       int size = sampled.rows * sampled.rows;
 
       hashtable_int *hashTable = hashtableCreate(size, NULL);
@@ -321,7 +361,8 @@ namespace cv
         }
       }
       std::cout << "model diameter: " << diameter << ", max distance: " << maxDist << std::endl;
-      model_diameter = maxDist + 1.0;
+      model_diameter = diameter;
+      max_dist = maxDist;
       rotation_threshold = angle_step_radians * 3.0;
       position_threshold = distanceStep * 4.0;
       hash_table = hashTable;
@@ -460,6 +501,58 @@ namespace cv
       poseClusters.clear();
     }
 
+    void PPF3DDetector::refinePoses(std::vector<Pose3DPtr> &poseList, const int topK, const float distError, std::vector<Pose3DPtr> &finalPoses)
+    {
+      finalPoses.clear();
+
+      for (int i = 0; i < topK; i++)
+      {
+        Pose3DPtr p = poseList[i];
+        Mat pct = transformPCPose(sampled_refine, p->pose);
+
+        // build KD-Tree to search points that distance less than a model radius
+        std::cout << "build KD-Tree to search points" << std::endl;
+        cv::Mat_<float> features(0, 3);
+        for (int i = 0; i < sampled_scene.rows; i++)
+        {
+          const float *point = sampled_scene.ptr<float>(i);
+          //Fill matrix
+          cv::Mat row = (cv::Mat_<float>(1, 3) << point[0], point[1], point[2]);
+          features.push_back(row);
+        }
+        cv::flann::Index flann_index(features, cv::flann::KDTreeIndexParams(1));
+        unsigned int max_neighbours = 3;
+        double max_dist = distError * distError;
+
+        int fitNum = 0;
+        // search all clusters
+        for (size_t j = 0; j < pct.rows; j++)
+        {
+          const float *point = pct.ptr<float>(j);
+          std::vector<float> vecQuery{point[0], point[1], point[2]};
+          std::vector<int> vecIndex;
+          std::vector<float> vecDist;
+          flann_index.knnSearch(vecQuery, vecIndex, vecDist, max_neighbours, cv::flann::SearchParams(32));
+          
+          // bool aligned = false;
+          // for (int k = 0; k < vecIndex.size()&& (!aligned); k++)
+          // {
+            // std::cout<<"index: "<<vecIndex[0]<<", distance: "<<vecDist[0]<<", max dist: "<<max_dist<<std::endl;
+            if (vecDist[0]<max_dist && vecIndex[0]!=0)
+            {
+              fitNum ++;
+              // aligned = true;
+            }
+          // }
+        }
+        double poseScore = ((double)(fitNum))/(pct.rows/2.0);
+        p->updateScore(poseScore);
+        finalPoses.push_back(p);
+      }
+      // sort the clusters so that we could output multiple hypothesis
+      std::sort(finalPoses.begin(), finalPoses.end(), sortPoseByScore);
+    }
+
     void PPF3DDetector::match(const Mat &pc, std::vector<Pose3DPtr> &results, const double relativeSceneSampleStep, const double relativeSceneDistance)
     {
       if (!trained)
@@ -479,6 +572,7 @@ namespace cv
       uint MINVOTE = n * 0.01;
       std::vector<Pose3DPtr> poseList;
       int sceneSamplingStep = scene_sample_step;
+      double poisson_radius = model_diameter * relativeSceneDistance;
 
       // compute bbox
       Vec2f xRange, yRange, zRange;
@@ -491,7 +585,15 @@ namespace cv
   float diameter = sqrt ( dx * dx + dy * dy + dz * dz );
   float distanceSampleStep = diameter * RelativeSceneDistance;*/
       // Mat sampled = samplePCByQuantization(pc, xRange, yRange, zRange, (float)(relativeSceneDistance/2.0), 0);
-      Mat sampled = pc;
+      // Mat sampled = pc;
+      MyMesh m, subM;
+      Mat sampled;
+      cvMat2vcgMesh(pc, m);
+      std::cout<<"transform size: "<< m.vert.size()<<std::endl;
+      poissonDiskSampling(m, subM, poisson_radius);
+      std::cout<<"sub sampling size: "<< subM.vert.size()<<std::endl;
+      vcgMesh2cvMat(subM, sampled);
+
       // Mat sampled_small = samplePCByCluster(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0.31415);
       // std::cout << "number of scene points after sampled_small: " << sampled_small.rows << std::endl;
       // writePLY(sampled_small, "sampled_scene_small.ply");
@@ -511,7 +613,7 @@ namespace cv
       }
       cv::flann::Index flann_index(features, cv::flann::KDTreeIndexParams(1));
       unsigned int max_neighbours = num_ref_points * 2;
-      double model_max_dist = model_diameter * model_diameter;
+      double model_max_dist = max_dist * max_dist;
       // allocate the accumulator : Moved this to the inside of the loop
       /*#if !defined (_OPENMP)
      uint* accumulator = (uint*)calloc(numAngles*n, sizeof(uint));
@@ -675,12 +777,14 @@ namespace cv
           }
         }
       }
-
+      sampled_scene = sampled;
       // TODO : Make the parameters relative if not arguments.
       //double MinMatchScore = 0.5;
       // int numPosesAdded = sampled.rows / sceneSamplingStep;
       std::cout << "number of Hypothesis: " << poseList.size() << std::endl;
-      clusterPoses(poseList, poseList.size(), results);
+      std::vector<Pose3DPtr> clusteredPoses;
+      clusterPoses(poseList, poseList.size(), clusteredPoses);
+      refinePoses(clusteredPoses, 6, poisson_radius, results);
     }
 
   } // namespace ppf_match_3d

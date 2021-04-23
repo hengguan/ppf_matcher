@@ -70,5 +70,8 @@ target_link_libraries (segment_cluster ${PCL_LIBRARIES})
 add_executable (test_mat test.cpp)
 target_link_libraries (test_mat ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
 
+add_executable(poisson_disk_sampling poisson_disk_sampling.cpp)
+target_link_libraries (poisson_disk_sampling ${PCL_LIBRARIES})
+
 # add_executable (convert_mm_to_m convert_mm_to_m.cpp)
 # target_link_libraries (convert_mm_to_m ${PCL_LIBRARIES})
