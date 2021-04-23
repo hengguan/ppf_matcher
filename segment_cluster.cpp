@@ -133,7 +133,7 @@ int main(int argc, char **argv)
         PointCloud<PointNormal>::Ptr ext_cloud(new PointCloud<PointNormal>);
         PointCloud<PointNormal>::Ptr cloud_normal(new PointCloud<PointNormal>);
 
-        if (pcl::io::loadPCDFile(ss_in.str(), *cloud) == -1)
+        if (pcl::io::loadPLYFile(ss_in.str(), *cloud) == -1)
         {
             PCL_ERROR("read false");
             return 0;
@@ -146,21 +146,22 @@ int main(int argc, char **argv)
         fbf.setSigmaR (3.0);
         // fbf.setKeepOrganized(true);
         fbf.filter (*cloud_filtered);
+        cout << "after bilateral filter point cloud: " <<cloud_filtered->size()<< endl;
         
         //3.直通滤波
-        pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_(new pcl::PointCloud<pcl::PointXYZRGBA>);
-        pcl::PassThrough<pcl::PointXYZRGBA> pass;     //创建滤波器对象
-        pass.setInputCloud(cloud_filtered);                //设置待滤波的点云
-        pass.setFilterFieldName("z");             //设置在Z轴方向上进行滤波
-        pass.setFilterLimits(-1500, 0);    //设置滤波范围(从最高点向下12米去除)
-        pass.setFilterLimitsNegative(false);      //保留
-        pass.filter(*cloud_);
+        // pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_(new pcl::PointCloud<pcl::PointXYZRGBA>);
+        // pcl::PassThrough<pcl::PointXYZRGBA> pass;     //创建滤波器对象
+        // pass.setInputCloud(cloud_filtered);                //设置待滤波的点云
+        // pass.setFilterFieldName("z");             //设置在Z轴方向上进行滤波
+        // pass.setFilterLimits(-1500, 0);    //设置滤波范围(从最高点向下12米去除)
+        // pass.setFilterLimitsNegative(false);      //保留
+        // pass.filter(*cloud_);
 
-        copyPointCloud(*cloud_, *cloud_filtered_xyz);
+        copyPointCloud(*cloud_filtered, *cloud_filtered_xyz);
         //体素化下采样******************************************************
         VoxelGrid<PointXYZ> vox;
         vox.setInputCloud(cloud_filtered_xyz);
-        vox.setLeafSize(1.0, 1.0, 1.0);
+        vox.setLeafSize(2.0, 2.0, 2.0);
         // vox.setKeepOrganized(true);
         vox.filter(*cloud_sampled);
         cout << "down sampling point cloud: " <<cloud_sampled->size()<< endl;
@@ -201,9 +202,9 @@ int main(int argc, char **argv)
             PointNormal np;
             vcg::Point3f n = m.vert[i].N();
             vcg::Point3f p = m.vert[i].P();
-            np.x = p[0];
-            np.y = p[1];
-            np.z = p[2];
+            np.x = p[0] / 1000.0;
+            np.y = p[1] / 1000.0;
+            np.z = p[2] / 1000.0;
             np.normal_x = n[0];
             np.normal_y = n[1];
             np.normal_z = n[2];
@@ -246,7 +247,7 @@ int main(int argc, char **argv)
         sac.setMethodType(SAC_RANSAC);
         sac.setModelType(SACMODEL_PLANE);
         sac.setMaxIterations(100);
-        sac.setDistanceThreshold(3);
+        sac.setDistanceThreshold(0.003);
         //提取平面(展示并输出)******************************************************
         ext.setInputCloud(cloud_normal);
         sac.segment(*inliner, *coefficients);

@@ -32,6 +32,39 @@ static void help(const string &errorMessage)
     cout << "\nPlease start again with new parameters" << endl;
 }
 
+// char filename[256][256];
+// int len = 0;
+int trave_dir(char* path, vector<string> &file_names, int depth)
+{
+    DIR *d; //声明一个句柄
+    struct dirent *file; //readdir函数的返回值就存放在这个结构体中
+    struct stat sb;   
+
+    if(!(d = opendir(path)))
+    {
+        printf("error opendir %s!!!\n",path);
+        return -1;
+    }
+    int idx=0;
+    while((file = readdir(d)) != NULL)
+    {
+        //把当前目录.，上一级目录..及隐藏文件都去掉，避免死循环遍历目录
+        if(strncmp(file->d_name, ".", 1) == 0)
+            continue;
+        // strcpy(file_names[idx++], file->d_name); //保存遍历到的文件名
+        // file_names[idx++] = file->d_name;
+        std::string str5 = file->d_name;
+        file_names.push_back(str5);
+        //判断该文件是否是目录，及是否已搜索了三层，这里我定义只搜索了三层目录，太深就不搜了，省得搜出太多文件
+        // if(stat(file->d_name, &sb) >= 0 && S_ISDIR(sb.st_mode) && depth <= 1)
+        // {
+        //     trave_dir(file->d_name, depth + 1);
+        // }
+    }
+    closedir(d);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     // welcome message
@@ -133,10 +166,11 @@ int main(int argc, char **argv)
     //     "000069.pcd_normal", "000082.pcd_normal", "000170.pcd_normal", 
     //     "000300.pcd_normal", "000377.pcd_normal", "000499.pcd_normal", 
     //     "000684.pcd_normal", "000721.pcd_normal", "000739.pcd_normal", "000745.pcd_normal"};
-    vector<string> file_ids = {"000041m", "000145m","000283m", "000403m", "000512m", "000651m", "000753m", "000902m", "000992m", "001080m", "001168m", "001231m"};
+    // vector<string> file_ids = {"000041m", "000145m","000283m", "000403m", "000512m", "000651m", "000753m", "000902m", "000992m", "001080m", "001168m", "001231m"};
     // vector<string> file_ids = {"scene_0", "scene_1","scene_2", "scene_3", "scene_4", "scene_5", "scene_6", "scene_7", "scene_8", "scene_9", "scene_10", "scene_11"};
     // vector<string> file_ids = {"000041m", "000044m","000063m", "000098m", "000123m", "000142m", "000177m", "000181m", "000184m", "000280m"};
-
+    vector<string> file_ids;
+    trave_dir("../samples/data/cloud", file_ids, 1);
     // Create an instance of ICP
     ICP icp(100, 0.05f, 2.5f, 8);
     for(int i=0; i<file_ids.size(); i++)
@@ -145,7 +179,8 @@ int main(int argc, char **argv)
         /*设置窗口viewer的背景颜色*/
         viewer->setBackgroundColor(0, 0, 0);
         stringstream ss_in;
-        ss_in << "../samples/data/cloud_lm/" << file_ids[i] << ".ply";
+        ss_in << "../samples/data/cloud/" << file_ids[i];
+        cout << "path: "<<ss_in.str()<<endl;
         // Read the scene
         // Mat pcTest = loadPLYSimple(sceneFileName.c_str(), 1);
         PointCloud<PointNormal>::Ptr scene_normal(new PointCloud<PointNormal>());
