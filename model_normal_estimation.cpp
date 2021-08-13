@@ -28,7 +28,7 @@ int main(int argc, char** argv)
 
   cout << "Computing normals\n";
   cv::Vec3d viewpoint(0, 0, 0);
-  cv::ppf_match_3d::computeNormalsPC3d(points, pointsAndNormals, 6, false, viewpoint);
+  cv::ppf_match_3d::computeNormalsPC3d(points, pointsAndNormals, 8, false, viewpoint);
 
   std::cout << "Writing points\n";
   cv::ppf_match_3d::writePLY(pointsAndNormals, outputFileName.c_str());

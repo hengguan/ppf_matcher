@@ -151,7 +151,7 @@ namespace cv
         data[5] = n[2];
       }
     }
-        
+
     /*static size_t hashMurmur(uint key)
 {
   size_t hashKey=0;
@@ -286,15 +286,11 @@ namespace cv
       MyMesh m, subM, subM_refine;
       Mat sampled;
       cvMat2vcgMesh(PC, m);
-      std::cout<<"transform size: "<< m.vert.size()<<std::endl;
       poissonDiskSampling(m, subM, poisson_radius);
-      std::cout<<"sub sampling size: "<< subM.vert.size()<<std::endl;
       vcgMesh2cvMat(subM, sampled);
-      std::cout << "number of model points after sampled: " << sampled.rows << std::endl;
-      // writePLY(sampled, "sampled.ply");
-      std::cout<<"transform size: "<< m.vert.size()<<std::endl;
-      poissonDiskSampling(m, subM_refine, poisson_radius/2.0);
-      std::cout<<"sub sampling refine size: "<< subM_refine.vert.size()<<std::endl;
+
+      writePLY(sampled, "sampled.ply");
+      poissonDiskSampling(m, subM_refine, poisson_radius / 2.0);
       vcgMesh2cvMat(subM_refine, sampled_refine);
       int size = sampled.rows * sampled.rows;
 
@@ -510,8 +506,6 @@ namespace cv
         Pose3DPtr p = poseList[i];
         Mat pct = transformPCPose(sampled_refine, p->pose);
 
-        // build KD-Tree to search points that distance less than a model radius
-        std::cout << "build KD-Tree to search points" << std::endl;
         cv::Mat_<float> features(0, 3);
         for (int i = 0; i < sampled_scene.rows; i++)
         {
@@ -533,19 +527,19 @@ namespace cv
           std::vector<int> vecIndex;
           std::vector<float> vecDist;
           flann_index.knnSearch(vecQuery, vecIndex, vecDist, max_neighbours, cv::flann::SearchParams(32));
-          
+
           // bool aligned = false;
           // for (int k = 0; k < vecIndex.size()&& (!aligned); k++)
           // {
-            // std::cout<<"index: "<<vecIndex[0]<<", distance: "<<vecDist[0]<<", max dist: "<<max_dist<<std::endl;
-            if (vecDist[0]<max_dist && vecIndex[0]!=0)
-            {
-              fitNum ++;
-              // aligned = true;
-            }
+          // std::cout<<"index: "<<vecIndex[0]<<", distance: "<<vecDist[0]<<", max dist: "<<max_dist<<std::endl;
+          if (vecDist[0] < max_dist && vecIndex[0] != 0)
+          {
+            fitNum++;
+            // aligned = true;
+          }
           // }
         }
-        double poseScore = ((double)(fitNum))/(pct.rows/2.0);
+        double poseScore = ((double)(fitNum)) / (pct.rows / 2.0);
         p->updateScore(poseScore);
         finalPoses.push_back(p);
       }
@@ -589,16 +583,13 @@ namespace cv
       MyMesh m, subM;
       Mat sampled;
       cvMat2vcgMesh(pc, m);
-      std::cout<<"transform size: "<< m.vert.size()<<std::endl;
       poissonDiskSampling(m, subM, poisson_radius);
-      std::cout<<"sub sampling size: "<< subM.vert.size()<<std::endl;
       vcgMesh2cvMat(subM, sampled);
 
       // Mat sampled_small = samplePCByCluster(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0.31415);
       // std::cout << "number of scene points after sampled_small: " << sampled_small.rows << std::endl;
       // writePLY(sampled_small, "sampled_scene_small.ply");
       // Mat sampled = samplePCByCluster(pc, xRange, yRange, zRange, (float)relativeSceneDistance, 0.174532922);
-      std::cout << "number of scene points after sampled: " << sampled.rows << std::endl;
       // writePLY(sampled, "sampled_scene.ply");
 
       // build KD-Tree to search points that distance less than a model radius
@@ -633,7 +624,7 @@ namespace cv
         const Vec3f n1(sampled.ptr<float>(i) + 3);
         Vec3d tsg = Vec3d::all(0);
         Matx33d Rsg = Matx33d::all(0), RInv = Matx33d::all(0);
-        
+
         computeTransformRT(p1, n1, Rsg, tsg);
 
         uint *accumulator = (uint *)calloc(numAngles * n, sizeof(uint));
@@ -657,7 +648,7 @@ namespace cv
 
           const Vec3f p2(sampled.ptr<float>(pInd));
           const Vec3f n2(sampled.ptr<float>(pInd) + 3);
-          
+
           Vec4d f = Vec4d::all(0);
           computePPFFeatures(p1, n1, p2, n2, f);
           KeyType hashValue_ = hashPPF(f, angle_step, distanceStep);
@@ -678,7 +669,7 @@ namespace cv
           alpha_scene = -alpha_scene;
 
           // including 80 neighbor ot search candidates
-          for (int k = 0; k < 81; k++) 
+          for (int k = 0; k < 81; k++)
           {
             KeyType hashValue = hashValues[k];
             hashnode_i *node = hashtableGetBucketHashed(hash_table, (hashValue));
@@ -784,7 +775,7 @@ namespace cv
       std::cout << "number of Hypothesis: " << poseList.size() << std::endl;
       std::vector<Pose3DPtr> clusteredPoses;
       clusterPoses(poseList, poseList.size(), clusteredPoses);
-      refinePoses(clusteredPoses, 6, poisson_radius, results);
+      refinePoses(clusteredPoses, 6, poisson_radius * 0.8, results);
     }
 
   } // namespace ppf_match_3d

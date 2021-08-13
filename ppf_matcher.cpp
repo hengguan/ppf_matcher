@@ -17,6 +17,7 @@
 // #include <pcl/features/normal_3d.h>
 // #include <pcl/console/parse.h>
 #include <yaml-cpp/yaml.h>
+#include <opencv2/viz.hpp>
 
 using namespace std::chrono_literals;
 using namespace std;
@@ -34,7 +35,7 @@ static void help(const string &errorMessage)
 
 // char filename[256][256];
 // int len = 0;
-int trave_dir(char* path, vector<string> &file_names, int depth)
+int trave_dir(const char* path, vector<string> &file_names, int depth)
 {
     DIR *d; //声明一个句柄
     struct dirent *file; //readdir函数的返回值就存放在这个结构体中
@@ -105,23 +106,11 @@ int main(int argc, char **argv)
     double sceneDistStep = cfg["sceneDistStep"].as<double>();
 
     // string modelFileName = (string)argv[1];
-    // string sceneFileName = (string)argv[2];
+    string sceneFileName = (string)argv[2];
 
     // Mat pc = loadPLYSimple(modelFileName.c_str(), 1);
     PointCloud<PointNormal>::Ptr cloud_normal(new PointCloud<PointNormal>());
     PointCloud<PointNormal>::Ptr vox_cloud(new PointCloud<PointNormal>());
-    // for (int i = 0; i < pc.rows; i++)
-    // {
-    //     const float *data = pc.ptr<float>(i);
-    //     PointNormal pn;
-    //     pn.x = data[0];
-    //     pn.y = data[1];
-    //     pn.z = data[2];
-    //     pn.normal_x = data[3];
-    //     pn.normal_y = data[4];
-    //     pn.normal_z = data[5];
-    //     cloud_normal->push_back(pn);
-    // }
     if (pcl::io::loadPLYFile(argv[1], *cloud_normal) == -1)
     {
         PCL_ERROR("read false");
@@ -170,7 +159,8 @@ int main(int argc, char **argv)
     // vector<string> file_ids = {"scene_0", "scene_1","scene_2", "scene_3", "scene_4", "scene_5", "scene_6", "scene_7", "scene_8", "scene_9", "scene_10", "scene_11"};
     // vector<string> file_ids = {"000041m", "000044m","000063m", "000098m", "000123m", "000142m", "000177m", "000181m", "000184m", "000280m"};
     vector<string> file_ids;
-    trave_dir("../samples/data/cloud", file_ids, 1);
+    const char* pth = sceneFileName.data();
+    trave_dir(pth, file_ids, 1);
     // Create an instance of ICP
     ICP icp(100, 0.05f, 2.5f, 8);
     for(int i=0; i<file_ids.size(); i++)
@@ -179,7 +169,7 @@ int main(int argc, char **argv)
         /*设置窗口viewer的背景颜色*/
         viewer->setBackgroundColor(0, 0, 0);
         stringstream ss_in;
-        ss_in << "../samples/data/cloud/" << file_ids[i];
+        ss_in << sceneFileName << file_ids[i];
         cout << "path: "<<ss_in.str()<<endl;
         // Read the scene
         // Mat pcTest = loadPLYSimple(sceneFileName.c_str(), 1);
@@ -193,9 +183,9 @@ int main(int argc, char **argv)
         for(int i=0;i<scene_normal->size();i++)
         {
             float *data = pcTest.ptr<float>(i);
-            scene_normal->at(i).x *= 1000.0;
-            scene_normal->at(i).y *= 1000.0;
-            scene_normal->at(i).z *= 1000.0;
+            // scene_normal->at(i).x *= 1000.0;
+            // scene_normal->at(i).y *= 1000.0;
+            // scene_normal->at(i).z *= 1000.0;
             data[0] = scene_normal->at(i).x;
             data[1] = scene_normal->at(i).y;
             data[2] = scene_normal->at(i).z;

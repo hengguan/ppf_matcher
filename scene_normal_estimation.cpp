@@ -11,6 +11,7 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/fast_bilateral.h>
 
 #include <thread>
 
@@ -37,7 +38,9 @@ int main(int argc, char **argv)
     string outputFileName = (string)argv[2];
     cv::Mat points, pointsAndNormals;
 
-    PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
+    PointCloud<PointXYZRGBA>::Ptr cloud(new PointCloud<PointXYZRGBA>);
+    PointCloud<PointXYZRGBA>::Ptr cloud_filtered(new PointCloud<PointXYZRGBA>);
+    PointCloud<PointXYZ>::Ptr cloud_filtered_xyz(new PointCloud<PointXYZ>);
     PointCloud<PointXYZ>::Ptr cloud_sampled(new PointCloud<PointXYZ>);
     PointCloud<PointXYZ>::Ptr sor_cloud(new PointCloud<PointXYZ>);
     PointCloud<PointXYZ>::Ptr cloud_cluster(new PointCloud<PointXYZ>);
@@ -49,10 +52,19 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    // Apply the filter
+    pcl::FastBilateralFilter<pcl::PointXYZRGBA> fbf;
+    fbf.setInputCloud (cloud);
+    fbf.setSigmaS (5.0);
+    fbf.setSigmaR (3);
+    fbf.filter (*cloud_filtered);
+
+    copyPointCloud(*cloud_filtered, *cloud_filtered_xyz);
     //体素化下采样******************************************************
     VoxelGrid<PointXYZ> vox;
-    vox.setInputCloud(cloud);
+    vox.setInputCloud(cloud_filtered_xyz);
     vox.setLeafSize(2.0, 2.0, 2.0);
+    // vox.setKeepOrganized(true);
     vox.filter(*cloud_sampled);
     cout << "down sampling point cloud: " <<cloud_sampled->size()<< endl;
  
@@ -60,79 +72,79 @@ int main(int argc, char **argv)
     StatisticalOutlierRemoval<PointXYZ> sor;
     sor.setMeanK(50);
     sor.setInputCloud(cloud_sampled);
-    sor.setStddevMulThresh(3.0);
+    sor.setStddevMulThresh(2.0);
     sor.filter(*sor_cloud);
     cout << "Statistical Outlier Removal: " << sor_cloud->size()<< endl;
 
     //欧式聚类*******************************************************
-    vector<PointIndices> ece_inlier;
-    search::KdTree<PointXYZ>::Ptr tree(new search::KdTree<PointXYZ>);
-    EuclideanClusterExtraction<PointXYZ> ece;
-    ece.setInputCloud(sor_cloud);
-    ece.setClusterTolerance(80);
-    ece.setMinClusterSize(1000);
-    ece.setMaxClusterSize(200000);
-    ece.setSearchMethod(tree);
-    ece.extract(ece_inlier);
-    //聚类结果展示***************************************************
-    ExtractIndices<PointXYZ> ext;
-    int maxInd = 0, maxNum = 0;
-    cout << "number of clusters: " << ece_inlier.size() << endl;
-    for (int i = 0; i < ece_inlier.size(); i++)
-    {
-        if (ece_inlier[i].indices.size() > maxNum)
-        {
-            maxInd = i;
-            maxNum = ece_inlier[i].indices.size();
-        }
-    }
-    vector<int> ece_inlier_ext = ece_inlier[maxInd].indices;
-    copyPointCloud(*sor_cloud, ece_inlier_ext, *cloud_cluster); //按照索引提取点云数据
-    cout << "Euclidean Cluster Extraction: " << cloud_cluster->size()<< endl;
+    // vector<PointIndices> ece_inlier;
+    // search::KdTree<PointXYZ>::Ptr tree(new search::KdTree<PointXYZ>);
+    // EuclideanClusterExtraction<PointXYZ> ece;
+    // ece.setInputCloud(sor_cloud);
+    // ece.setClusterTolerance(80);
+    // ece.setMinClusterSize(1000);
+    // ece.setMaxClusterSize(200000);
+    // ece.setSearchMethod(tree);
+    // ece.extract(ece_inlier);
+    // //聚类结果展示***************************************************
+    // ExtractIndices<PointXYZ> ext;
+    // int maxInd = 0, maxNum = 0;
+    // cout << "number of clusters: " << ece_inlier.size() << endl;
+    // for (int i = 0; i < ece_inlier.size(); i++)
+    // {
+    //     if (ece_inlier[i].indices.size() > maxNum)
+    //     {
+    //         maxInd = i;
+    //         maxNum = ece_inlier[i].indices.size();
+    //     }
+    // }
+    // vector<int> ece_inlier_ext = ece_inlier[maxInd].indices;
+    // copyPointCloud(*sor_cloud, ece_inlier_ext, *cloud_cluster); //按照索引提取点云数据
+    // cout << "Euclidean Cluster Extraction: " << cloud_cluster->size()<< endl;
 
-    //平面分割(RANSAC)********************************************************
-    SACSegmentation<PointXYZ> sac;
-    PointIndices::Ptr inliner(new PointIndices);
-    ModelCoefficients::Ptr coefficients(new ModelCoefficients);
-    PointCloud<PointXYZ>::Ptr sac_cloud(new PointCloud<PointXYZ>);
-    sac.setInputCloud(cloud_cluster);
-    sac.setMethodType(SAC_RANSAC);
-    sac.setModelType(SACMODEL_PLANE);
-    sac.setMaxIterations(100);
-    sac.setDistanceThreshold(20);
-    //提取平面(展示并输出)******************************************************
-    ext.setInputCloud(cloud_cluster);
-    sac.segment(*inliner, *coefficients);
-    if (inliner->indices.size() == 0)
-    {
-        std::cout << "segmentation failure!!" << endl;
-    }
-    //按照索引提取点云*************
-    ext.setIndices(inliner);
-    ext.setNegative(true);
-    ext.filter(*ext_cloud);
-    cout << "plane segmentation: " << ext_cloud->size()<< endl;
+    // //平面分割(RANSAC)********************************************************
+    // SACSegmentation<PointXYZ> sac;
+    // PointIndices::Ptr inliner(new PointIndices);
+    // ModelCoefficients::Ptr coefficients(new ModelCoefficients);
+    // PointCloud<PointXYZ>::Ptr sac_cloud(new PointCloud<PointXYZ>);
+    // sac.setInputCloud(cloud_cluster);
+    // sac.setMethodType(SAC_RANSAC);
+    // sac.setModelType(SACMODEL_PLANE);
+    // sac.setMaxIterations(100);
+    // sac.setDistanceThreshold(20);
+    // //提取平面(展示并输出)******************************************************
+    // ext.setInputCloud(cloud_cluster);
+    // sac.segment(*inliner, *coefficients);
+    // if (inliner->indices.size() == 0)
+    // {
+    //     std::cout << "segmentation failure!!" << endl;
+    // }
+    // //按照索引提取点云*************
+    // ext.setIndices(inliner);
+    // ext.setNegative(true);
+    // ext.filter(*ext_cloud);
+    // cout << "plane segmentation: " << ext_cloud->size()<< endl;
 
     boost::shared_ptr<visualization::PCLVisualizer> viewer(new visualization::PCLVisualizer("cloud_scene"));
     /*设置窗口viewer的背景颜色*/
     viewer->setBackgroundColor(0, 0, 0);
-    viewer->addPointCloud<PointXYZ>(ext_cloud, "cloud_scene");
+    viewer->addPointCloud<PointXYZ>(sor_cloud, "cloud_scene");
     viewer->setPointCloudRenderingProperties(visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_scene");
 
     cout << "Loading points\n";
     // cv::ppf_match_3d::loadPLYSimple(modelFileName.c_str(), 1).copyTo(points);
-    cv::Mat cloud_in = cv::Mat(ext_cloud->size(), 3, CV_32FC1);
-    for (int i = 0; i < ext_cloud->size(); i++)
+    cv::Mat cloud_in = cv::Mat(sor_cloud->size(), 3, CV_32FC1);
+    for (int i = 0; i < sor_cloud->size(); i++)
     {
         float *data = cloud_in.ptr<float>(i);
-        data[0] = ext_cloud->at(i).x;
-        data[1] = ext_cloud->at(i).y;
-        data[2] = ext_cloud->at(i).z;
+        data[0] = sor_cloud->at(i).x;
+        data[1] = sor_cloud->at(i).y;
+        data[2] = sor_cloud->at(i).z;
     }
 
     cout << "Computing normals\n";
     cv::Vec3d viewpoint(0, 0, 0);
-    cv::ppf_match_3d::computeNormalsPC3d(cloud_in, pointsAndNormals, 6, false, viewpoint);
+    cv::ppf_match_3d::computeNormalsPC3d(cloud_in, pointsAndNormals, 10, true, viewpoint);
 
     std::cout << "Writing points\n";
     cv::ppf_match_3d::writePLY(pointsAndNormals, outputFileName.c_str());

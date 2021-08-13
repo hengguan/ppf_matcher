@@ -58,20 +58,23 @@ target_link_libraries(ppf_match_3d ${OpenCV_LIBRARIES} pose_3d t_hash_int)
 add_executable (ppf_matcher ppf_matcher.cpp)
 target_link_libraries (ppf_matcher ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ppf_match_3d ppf_helpers icp yaml-cpp.a)
 
-add_executable (model_normal_estimation model_normal_estimation.cpp)
-target_link_libraries (model_normal_estimation ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}  ppf_helpers)
+# add_executable (model_normal_estimation model_normal_estimation.cpp)
+# target_link_libraries (model_normal_estimation ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}  ppf_helpers)
 
-add_executable (scene_normal_estimation scene_normal_estimation.cpp)
-target_link_libraries (scene_normal_estimation ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}  ppf_helpers)
+# add_executable (scene_normal_estimation scene_normal_estimation.cpp)
+# target_link_libraries (scene_normal_estimation ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}  ppf_helpers)
 
-add_executable (segment_cluster segment_cluster.cpp)
-target_link_libraries (segment_cluster ${PCL_LIBRARIES})
+# add_executable (segment_cluster segment_cluster.cpp)
+# target_link_libraries (segment_cluster ${PCL_LIBRARIES})
 
-add_executable (test_mat test.cpp)
-target_link_libraries (test_mat ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
+# add_executable (test_mat test.cpp)
+# target_link_libraries (test_mat ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
 
-add_executable(poisson_disk_sampling poisson_disk_sampling.cpp)
-target_link_libraries (poisson_disk_sampling ${PCL_LIBRARIES})
+# add_executable(poisson_disk_sampling poisson_disk_sampling.cpp)
+# target_link_libraries (poisson_disk_sampling ${PCL_LIBRARIES})
 
 # add_executable (convert_mm_to_m convert_mm_to_m.cpp)
 # target_link_libraries (convert_mm_to_m ${PCL_LIBRARIES})
+
+add_executable (linemod_normal linemod_normal.cpp)
+target_link_libraries (linemod_normal ${OpenCV_LIBRARIES} ppf_helpers)
