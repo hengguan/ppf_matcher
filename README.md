@@ -1,7 +1,7 @@
 # ppf_matcher
 surface matching with point pair points
 
-improve original Surface Matching code in opencv based on Joel Vidal^{\[1\]} work and Stefan Hinterstoisser work^{[2]}. using [Linemode](https://ptak.felk.cvut.cz/6DB/public/bop_datasets/lm_base.zip) dataset as test data.
+improve original Surface Matching code in opencv based on $Joel Vidal^{\[1\]}$ and $Stefan Hinterstoisser^{[2]}$ work. using [Linemode](https://ptak.felk.cvut.cz/6DB/public/bop_datasets/lm_base.zip) dataset as test data.
 
 
 ## Reference
